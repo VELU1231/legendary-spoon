@@ -1,0 +1,37 @@
+# Cloudflare Workers — JobSniper Backend
+# https://developers.cloudflare.com/workers/
+#
+# NOTE: The backend is a Node.js/Express app.
+# For Cloudflare Workers you have two options:
+#
+# Option A (Recommended for simplicity):
+#   Deploy the backend to a Node.js-compatible host (Render, Railway, Fly.io)
+#   and point Cloudflare Pages env vars at it.
+#   → https://render.com  (free tier available)
+#
+# Option B (Full Cloudflare):
+#   Use Cloudflare Workers + D1 (SQLite) + Durable Objects (WebSockets).
+#   This requires rewriting the backend for the Workers runtime.
+#   See: https://developers.cloudflare.com/d1/
+#        https://developers.cloudflare.com/durable-objects/
+#
+# This file is kept as a reference for Option B future migration.
+
+name = "jobsniper-backend"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding  = "DB"
+database_name = "jobsniper"
+database_id   = ""   # fill in after: wrangler d1 create jobsniper
+
+[vars]
+FRONTEND_URL        = "https://jobsniper-frontend.pages.dev"
+FETCH_INTERVAL_MS   = "30000"
+TELEGRAM_MIN_WIN_SCORE = "70"
+
+# Secrets (set via: wrangler secret put <NAME>)
+# TELEGRAM_BOT_TOKEN
+# TELEGRAM_CHAT_ID
