@@ -28,14 +28,14 @@ async function fetchHackerNews() {
     for (const comment of children.slice(0, 30)) {
       if (!comment.text || comment.dead || comment.deleted) continue;
       const text = comment.text;
-      const firstLine = text.replace(/<[^>]*>/g, '').split('\n')[0].slice(0, 120);
+      const firstLine = stripHtml(text).split('\n')[0].slice(0, 120);
       if (!firstLine) continue;
 
       jobs.push({
         id: `${SOURCE}_${comment.id}`,
         title: firstLine,
         company: extractCompany(firstLine),
-        description: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500),
+        description: stripHtml(text).slice(0, 500),
         url: `https://news.ycombinator.com/item?id=${comment.id}`,
         source: SOURCE,
         category: detectCategory(text),
@@ -54,6 +54,31 @@ async function fetchHackerNews() {
     console.error('[HackerNews] Error:', err.message);
   }
   return jobs;
+}
+
+/**
+ * Strip HTML tags safely.
+ * Uses an allowlist approach: remove every tag unconditionally.
+ * We do NOT try to selectively keep "safe" tags — strip all of them.
+ */
+function stripHtml(html) {
+  if (!html) return '';
+  return String(html)
+    // Replace block-level tags with a newline so paragraphs are preserved
+    .replace(/<\/?(p|br|div|li|tr|td|th|h[1-6])\b[^>]*>/gi, '\n')
+    // Strip every remaining tag
+    .replace(/<[^>]+>/g, '')
+    // Decode common HTML entities
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    // Collapse whitespace
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function extractCompany(text) {

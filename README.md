@@ -177,7 +177,71 @@ frontend/src/
 
 ## 🚢 Free Deployment
 
-### Render.com
+---
+
+### ☁️ Cloudflare Pages (Frontend) + Render.com (Backend) — Recommended
+
+This is the exact deployment path for https://dash.cloudflare.com → Workers & Pages.
+
+#### Step 1 — Deploy the backend to Render.com (free, Node.js)
+
+1. Go to **https://render.com** → New → **Web Service**
+2. Connect your GitHub repo
+3. Set:
+   - **Root Directory:** `backend`
+   - **Build Command:** `npm install`
+   - **Start Command:** `node src/index.js`
+   - **Instance Type:** Free
+4. Under **Environment**, add:
+   ```
+   FRONTEND_URL   = https://your-site.pages.dev
+   FETCH_INTERVAL_MS = 30000
+   ```
+   Add optional Telegram vars if you want alerts:
+   ```
+   TELEGRAM_BOT_TOKEN  = <your token>
+   TELEGRAM_CHAT_ID    = <your chat id>
+   ```
+5. Deploy → copy the service URL (e.g. `https://jobsniper-api.onrender.com`)
+
+#### Step 2 — Deploy the frontend to Cloudflare Pages
+
+1. Go to **https://dash.cloudflare.com → Workers & Pages → Create → Pages**
+2. **Connect to Git** → select your GitHub repo
+3. Set build configuration:
+   - **Framework preset:** Next.js (Static HTML Export)
+   - **Root Directory:** `frontend`
+   - **Build command:** `CF_PAGES=1 npm run build`
+   - **Build output directory:** `out`
+4. Under **Environment Variables**, add:
+   ```
+   NEXT_PUBLIC_API_URL = https://jobsniper-api.onrender.com
+   NEXT_PUBLIC_WS_URL  = wss://jobsniper-api.onrender.com/ws
+   ```
+5. Click **Save and Deploy** → Cloudflare builds and deploys automatically
+6. Your dashboard is live at `https://your-site.pages.dev`
+
+> **WebSocket note:** Render's free tier supports WebSocket connections.
+> On Cloudflare Pages the frontend connects to the Render backend via `wss://`.
+
+#### Local `.env` for development
+
+Create `backend/.env`:
+```env
+PORT=3001
+FRONTEND_URL=http://localhost:3000
+FETCH_INTERVAL_MS=30000
+```
+
+Create `frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_WS_URL=ws://localhost:3001/ws
+```
+
+---
+
+### Render.com (both frontend + backend)
 1. **Backend** → Web Service, root `backend/`, start `node src/index.js`
 2. **Frontend** → Static Site, root `frontend/`, build `npm run build`, publish `.next`
 3. Set `FRONTEND_URL` in backend env vars

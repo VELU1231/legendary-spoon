@@ -103,7 +103,7 @@ export default function ProposalModal({ job, onClose }) {
             </div>
 
             <p className="text-[10px] text-gray-500 text-center">
-              Tip: Customise the proposal above before copying, then paste it into the job application.
+              Tip: Customize the proposal above before copying, then paste it into the job application.
             </p>
           </>
         )}

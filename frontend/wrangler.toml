@@ -1,0 +1,14 @@
+# Cloudflare Pages — JobSniper Frontend
+# https://developers.cloudflare.com/pages/
+
+name = "jobsniper-frontend"
+pages_build_output_dir = "out"     # Next.js static export output dir
+
+[env.production.vars]
+# Set these in the Cloudflare Pages dashboard → Settings → Environment Variables
+# NEXT_PUBLIC_API_URL  = "https://your-backend.onrender.com"
+# NEXT_PUBLIC_WS_URL   = "wss://your-backend.onrender.com/ws"
+
+[env.preview.vars]
+# NEXT_PUBLIC_API_URL  = "http://localhost:3001"
+# NEXT_PUBLIC_WS_URL   = "ws://localhost:3001/ws"

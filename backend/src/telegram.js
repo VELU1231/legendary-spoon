@@ -70,9 +70,17 @@ function buildBar(score) {
   return `[${'█'.repeat(filled)}${'░'.repeat(10 - filled)}] ${score}%`;
 }
 
+/**
+ * Escape text for Telegram MarkdownV2.
+ * Per Telegram docs, ALL of the following must be escaped with a leading backslash:
+ *   \ _ * [ ] ( ) ~ ` > # + - = | { } . !
+ * The backslash itself must be escaped first to avoid double-escaping.
+ */
 function escapeMarkdown(text) {
   if (!text) return '';
-  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+  return String(text)
+    .replace(/\\/g, '\\\\')   // backslash first — must precede all others
+    .replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 }
 
 async function sendAlert(job) {
@@ -89,7 +97,7 @@ async function sendAlert(job) {
         body: JSON.stringify({
           chat_id:    CHAT_ID,
           text,
-          parse_mode: 'Markdown',
+          parse_mode: 'MarkdownV2',
           disable_web_page_preview: false,
         }),
         timeout: 8000,
