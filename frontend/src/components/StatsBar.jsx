@@ -10,7 +10,7 @@ export default function StatsBar({ stats, connected, lastUpdate }) {
       <div className="flex items-center gap-1.5">
         <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
         <span className={connected ? 'text-green-400 font-semibold' : 'text-red-400'}>
-          {connected ? 'LIVE' : 'Reconnecting…'}
+          {connected ? 'LIVE' : 'Syncing…'}
         </span>
       </div>
 

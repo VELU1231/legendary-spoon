@@ -1,0 +1,20 @@
+{
+  "name": "jobsniper-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create jobsniper",
+    "db:migrate:local": "wrangler d1 migrations apply jobsniper --local",
+    "db:migrate:remote": "wrangler d1 migrations apply jobsniper --remote"
+  },
+  "dependencies": {
+    "hono": "^4.12.4",
+    "fast-xml-parser": "^4.5.5"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

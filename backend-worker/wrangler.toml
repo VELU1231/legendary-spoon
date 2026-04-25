@@ -1,0 +1,36 @@
+# Cloudflare Worker — JobSniper API
+# https://developers.cloudflare.com/workers/
+#
+# Setup steps:
+#   1. npm install
+#   2. npm run db:create          → creates the D1 database and prints the database_id
+#   3. Edit this file: replace YOUR_DATABASE_ID with the id from step 2
+#   4. npm run db:migrate:remote  → applies the SQL schema to the remote D1
+#   5. npm run deploy             → publishes the Worker
+#
+# Set secrets (never commit these):
+#   wrangler secret put TELEGRAM_BOT_TOKEN
+#   wrangler secret put TELEGRAM_CHAT_ID
+#
+# Optional env var (non-secret, set below or in the dashboard):
+#   FRONTEND_URL   – CORS origin for the frontend
+
+name = "jobsniper-api"
+main = "src/index.js"
+compatibility_date = "2026-04-25"
+
+[[d1_databases]]
+binding           = "DB"
+database_name     = "jobsniper"
+database_id       = "YOUR_DATABASE_ID"   # replace after: npm run db:create
+migrations_dir    = "migrations"
+
+[triggers]
+# Cloudflare free tier: minimum 1-minute cron interval.
+# To approximate 30-second polling, deploy two workers at :00 and :30 (paid only).
+crons = ["*/1 * * * *"]
+
+[vars]
+# Override in the Cloudflare dashboard → Workers → jobsniper-api → Settings → Variables
+FRONTEND_URL          = "https://jobsniper-frontend.pages.dev"
+TELEGRAM_MIN_WIN_SCORE = "70"
