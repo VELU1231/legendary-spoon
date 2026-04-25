@@ -4,8 +4,9 @@ const weworkremotely = require('./weworkremotely');
 const arbeitnow = require('./arbeitnow');
 const hackernews = require('./hackernews');
 const jobicy = require('./jobicy');
+const reddit = require('./reddit');
 
-const SCRAPERS = [remotive, remoteok, weworkremotely, arbeitnow, hackernews, jobicy];
+const SCRAPERS = [remotive, remoteok, weworkremotely, arbeitnow, hackernews, jobicy, reddit];
 
 async function fetchAllJobs() {
   const results = await Promise.allSettled(SCRAPERS.map(s => s.fetch()));

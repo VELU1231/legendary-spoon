@@ -33,6 +33,8 @@ function initSchema() {
       fetched_at INTEGER NOT NULL,
       applicant_count INTEGER DEFAULT 0,
       score REAL DEFAULT 0,
+      win_probability REAL DEFAULT 0,
+      win_breakdown TEXT DEFAULT '{}',
       is_remote INTEGER DEFAULT 1,
       location TEXT
     );
@@ -40,12 +42,23 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_jobs_posted_at ON jobs(posted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_jobs_source ON jobs(source);
     CREATE INDEX IF NOT EXISTS idx_jobs_category ON jobs(category);
+    CREATE INDEX IF NOT EXISTS idx_jobs_win_probability ON jobs(win_probability DESC);
 
     CREATE TABLE IF NOT EXISTS seen_ids (
       id TEXT PRIMARY KEY,
       seen_at INTEGER NOT NULL
     );
   `);
+
+  // Non-destructive migration: add new columns to databases created before this schema version
+  const cols = db.prepare("PRAGMA table_info(jobs)").all().map(c => c.name);
+  if (!cols.includes('win_probability')) {
+    db.exec('ALTER TABLE jobs ADD COLUMN win_probability REAL DEFAULT 0');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_jobs_win_probability ON jobs(win_probability DESC)');
+  }
+  if (!cols.includes('win_breakdown')) {
+    db.exec("ALTER TABLE jobs ADD COLUMN win_breakdown TEXT DEFAULT '{}'");
+  }
 }
 
 function upsertJob(job) {
@@ -56,8 +69,8 @@ function upsertJob(job) {
   db.prepare(`
     INSERT INTO jobs (id, title, company, description, url, source, category, tags,
       budget_min, budget_max, budget_currency, posted_at, fetched_at,
-      applicant_count, score, is_remote, location)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      applicant_count, score, win_probability, win_breakdown, is_remote, location)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.id,
     job.title,
@@ -74,14 +87,21 @@ function upsertJob(job) {
     job.fetched_at,
     job.applicant_count || 0,
     job.score || 0,
+    job.win_probability || 0,
+    JSON.stringify(job.win_breakdown || {}),
     job.is_remote !== false ? 1 : 0,
     job.location || null
   );
   return true;
 }
 
-function getJobs({ limit = 50, offset = 0, source, category, keyword, minBudget, maxBudget, maxAgeMinutes } = {}) {
+function getJobs({ limit = 50, offset = 0, source, category, keyword, minBudget, maxBudget, maxAgeMinutes, sortBy = 'posted_at' } = {}) {
   const db = getDb();
+
+  // Validate sortBy to prevent SQL injection — only allow known columns
+  const ALLOWED_SORT = new Set(['posted_at', 'win_probability', 'score', 'fetched_at']);
+  const orderCol = ALLOWED_SORT.has(sortBy) ? sortBy : 'posted_at';
+
   let query = 'SELECT * FROM jobs WHERE 1=1';
   const params = [];
 
@@ -96,7 +116,7 @@ function getJobs({ limit = 50, offset = 0, source, category, keyword, minBudget,
     params.push(cutoff);
   }
 
-  query += ' ORDER BY posted_at DESC LIMIT ? OFFSET ?';
+  query += ` ORDER BY ${orderCol} DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   return db.prepare(query).all(...params).map(deserializeJob);
@@ -115,8 +135,9 @@ function deserializeJob(row) {
   if (!row) return null;
   return {
     ...row,
-    tags: (() => { try { return JSON.parse(row.tags || '[]'); } catch { return []; } })(),
-    is_remote: !!row.is_remote,
+    tags:         (() => { try { return JSON.parse(row.tags || '[]'); }         catch { return []; } })(),
+    win_breakdown: (() => { try { return JSON.parse(row.win_breakdown || '{}'); } catch { return {}; } })(),
+    is_remote:    !!row.is_remote,
   };
 }
 

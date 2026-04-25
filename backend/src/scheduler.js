@@ -1,6 +1,7 @@
 const { fetchAllJobs } = require('./scrapers');
 const { upsertJob } = require('./db');
 const { enrichJob } = require('./scorer');
+const telegram = require('./telegram');
 
 let broadcastFn = null;
 let intervalHandle = null;
@@ -26,8 +27,19 @@ async function runFetchCycle() {
 
     console.log(`[Scheduler] ${newJobs.length} new jobs found`);
 
-    if (newJobs.length > 0 && broadcastFn) {
-      broadcastFn({ type: 'new_jobs', jobs: newJobs, count: newJobs.length });
+    if (newJobs.length > 0) {
+      // Broadcast over WebSocket
+      if (broadcastFn) {
+        broadcastFn({ type: 'new_jobs', jobs: newJobs, count: newJobs.length });
+      }
+
+      // Send Telegram alerts for FAST_WIN jobs
+      const fastWinJobs = newJobs.filter(j => j.labels && j.labels.includes('FAST_WIN'));
+      if (fastWinJobs.length > 0) {
+        telegram.sendBatch(fastWinJobs).catch(err =>
+          console.error('[Scheduler] Telegram batch error:', err.message)
+        );
+      }
     }
 
     return newJobs;
@@ -37,9 +49,9 @@ async function runFetchCycle() {
   }
 }
 
-function start(intervalMs = 60000) {
+function start(intervalMs = 30000) {
   console.log(`[Scheduler] Starting with ${intervalMs / 1000}s interval`);
-  // Run immediately
+  // Run immediately, then on interval
   runFetchCycle();
   intervalHandle = setInterval(runFetchCycle, intervalMs);
 }

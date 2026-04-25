@@ -6,7 +6,7 @@ const scheduler = require('./scheduler');
 const jobsRouter = require('./routes/jobs');
 
 const PORT = process.env.PORT || 3001;
-const FETCH_INTERVAL_MS = parseInt(process.env.FETCH_INTERVAL_MS) || 60000; // 60 seconds
+const FETCH_INTERVAL_MS = parseInt(process.env.FETCH_INTERVAL_MS) || 30000; // 30 seconds
 
 const app = express();
 const server = http.createServer(app);
