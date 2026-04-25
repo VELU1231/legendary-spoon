@@ -112,7 +112,7 @@ function upsertJob(job) {
   return true;
 }
 
-function getJobs({ limit = 50, offset = 0, source, category, keyword, minBudget, maxBudget, maxAgeMinutes, sortBy = 'posted_at' } = {}) {
+function getJobs({ limit = 50, offset = 0, source, excludeSource, category, keyword, excludeKeyword, minBudget, maxBudget, maxAgeMinutes, sortBy = 'posted_at' } = {}) {
   const db = getDb();
 
   // Validate sortBy to prevent SQL injection — only allow known columns
@@ -123,8 +123,13 @@ function getJobs({ limit = 50, offset = 0, source, category, keyword, minBudget,
   const params = [];
 
   if (source) { query += ' AND source = ?'; params.push(source); }
+  if (excludeSource) { query += ' AND source != ?'; params.push(excludeSource); }
   if (category) { query += ' AND category LIKE ?'; params.push(`%${category}%`); }
   if (keyword) { query += ' AND (title LIKE ? OR description LIKE ? OR tags LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
+  if (excludeKeyword) {
+    query += ' AND title NOT LIKE ? AND (description NOT LIKE ? OR description IS NULL) AND (tags NOT LIKE ? OR tags IS NULL)';
+    params.push(`%${excludeKeyword}%`, `%${excludeKeyword}%`, `%${excludeKeyword}%`);
+  }
   if (minBudget) { query += ' AND budget_max >= ?'; params.push(minBudget); }
   if (maxBudget) { query += ' AND (budget_min <= ? OR budget_min IS NULL)'; params.push(maxBudget); }
   if (maxAgeMinutes) {

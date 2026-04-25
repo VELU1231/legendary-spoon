@@ -1,14 +1,16 @@
-# Cloudflare Pages — JobSniper Frontend
-# https://developers.cloudflare.com/pages/
+# Cloudflare Workers — JobSniper Frontend
+# https://developers.cloudflare.com/workers/static-assets/
+#
+# Deploy command: npx wrangler deploy
+# Build command:  CF_PAGES=1 npm run build   (outputs to ./out)
 
 name = "jobsniper-frontend"
-pages_build_output_dir = "out"     # Next.js static export output dir
+compatibility_date = "2026-04-25"
 
-[env.production.vars]
-# Set these in the Cloudflare Pages dashboard → Settings → Environment Variables
+[assets]
+directory = "./out"
+
+# Set environment variables in the Cloudflare dashboard under
+# Workers & Pages → jobsniper-frontend → Settings → Variables
 # NEXT_PUBLIC_API_URL  = "https://your-backend.onrender.com"
 # NEXT_PUBLIC_WS_URL   = "wss://your-backend.onrender.com/ws"
-
-[env.preview.vars]
-# NEXT_PUBLIC_API_URL  = "http://localhost:3001"
-# NEXT_PUBLIC_WS_URL   = "ws://localhost:3001/ws"

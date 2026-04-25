@@ -1,63 +1,65 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { WS_URL } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { fetchJobs } from '@/lib/api';
 
+const POLL_INTERVAL_MS = 30000; // 30 seconds (matches cron minimum)
+
+/**
+ * Polls /api/jobs every 30 seconds instead of using a WebSocket.
+ * Maintains the same interface as the original useWebSocket hook so that
+ * page.js requires no structural changes.
+ *
+ * - First poll seeds the seen-ID set without calling onNewJobs (avoids
+ *   spurious toasts/sounds for jobs already displayed on load).
+ * - Subsequent polls call onNewJobs only for genuinely new job IDs.
+ * - `connected` reflects whether the most recent poll succeeded.
+ */
 export function useWebSocket({ onNewJobs, onConnected, onDisconnected } = {}) {
-  const wsRef      = useRef(null);
-  const pingRef    = useRef(null);
-  const retryRef   = useRef(null);
-  const retryDelay = useRef(1000);
+  const seenIds      = useRef(new Set());
+  const firstPoll    = useRef(true);
+  const connectedRef = useRef(false);
+  const callbacksRef = useRef({ onNewJobs, onConnected, onDisconnected });
   const [connected, setConnected] = useState(false);
 
-  const connect = useCallback(() => {
-    try {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        retryDelay.current = 1000;
-        onConnected?.();
-        // Keepalive ping every 20 s
-        pingRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 20000);
-      };
-
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === 'new_jobs' && msg.jobs?.length) {
-            onNewJobs?.(msg.jobs, msg.count);
-          }
-        } catch {}
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        clearInterval(pingRef.current);
-        onDisconnected?.();
-        // Exponential back-off reconnect (max 30 s)
-        retryRef.current = setTimeout(() => {
-          retryDelay.current = Math.min(retryDelay.current * 1.5, 30000);
-          connect();
-        }, retryDelay.current);
-      };
-
-      ws.onerror = () => ws.close();
-    } catch {}
-  }, [onNewJobs, onConnected, onDisconnected]);
+  // Keep callbacks ref fresh each render so the interval never goes stale
+  useEffect(() => {
+    callbacksRef.current = { onNewJobs, onConnected, onDisconnected };
+  });
 
   useEffect(() => {
-    connect();
-    return () => {
-      clearTimeout(retryRef.current);
-      clearInterval(pingRef.current);
-      wsRef.current?.close();
-    };
-  }, [connect]);
+    async function poll() {
+      try {
+        const { jobs } = await fetchJobs({ sortBy: 'posted_at', limit: 50 });
+
+        const newJobs = firstPoll.current
+          ? []                                                          // seed pass — no toasts
+          : jobs.filter(j => !seenIds.current.has(j.id));             // subsequent passes
+        jobs.forEach(j => seenIds.current.add(j.id));
+        firstPoll.current = false;
+
+        if (!connectedRef.current) {
+          connectedRef.current = true;
+          setConnected(true);
+          callbacksRef.current.onConnected?.();
+        }
+
+        if (newJobs.length > 0) {
+          callbacksRef.current.onNewJobs?.(newJobs, newJobs.length);
+        }
+      } catch {
+        if (connectedRef.current) {
+          connectedRef.current = false;
+          setConnected(false);
+          callbacksRef.current.onDisconnected?.();
+        }
+      }
+    }
+
+    poll();
+    const timer = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally runs once
 
   return { connected };
 }
+

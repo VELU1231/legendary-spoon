@@ -236,12 +236,12 @@ export default function Dashboard() {
               <div className="text-center py-8 text-red-400 text-sm">
                 ⚠️ {error}
                 <br />
-                <span className="text-gray-500 text-xs">Make sure the backend is running on port 3001.</span>
+                <span className="text-gray-500 text-xs">Make sure the Worker is deployed and <code>NEXT_PUBLIC_API_URL</code> is set correctly.</span>
               </div>
             )}
             {!loading && !error && displayedJobs.length === 0 && (
               <div className="text-center py-16 text-gray-500 text-sm">
-                No jobs found yet — the backend is fetching listings every 30 seconds.
+                No jobs found yet — the Worker cron fetches listings every minute.
               </div>
             )}
 

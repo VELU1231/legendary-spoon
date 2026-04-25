@@ -9,7 +9,7 @@ function loadEnriched(filters) {
 }
 
 // GET /api/jobs
-// Query params: limit, offset, source, category, keyword,
+// Query params: limit, offset, source, excludeSource, category, keyword, excludeKeyword,
 //               minBudget, maxBudget, maxAgeMinutes,
 //               sortBy (posted_at | win_probability)
 router.get('/jobs', (req, res) => {
@@ -18,8 +18,10 @@ router.get('/jobs', (req, res) => {
       limit = '50',
       offset = '0',
       source,
+      excludeSource,
       category,
       keyword,
+      excludeKeyword,
       minBudget,
       maxBudget,
       maxAgeMinutes,
@@ -30,8 +32,10 @@ router.get('/jobs', (req, res) => {
       limit: Math.min(parseInt(limit) || 50, 200),
       offset: parseInt(offset) || 0,
       source,
+      excludeSource,
       category,
       keyword,
+      excludeKeyword,
       minBudget:     minBudget     ? parseFloat(minBudget)     : undefined,
       maxBudget:     maxBudget     ? parseFloat(maxBudget)     : undefined,
       maxAgeMinutes: maxAgeMinutes ? parseInt(maxAgeMinutes)   : undefined,
