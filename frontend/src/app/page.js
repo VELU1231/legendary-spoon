@@ -3,11 +3,14 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWebSocket }      from '@/hooks/useWebSocket';
 import { useJobs }           from '@/hooks/useJobs';
 import { useNotifications }  from '@/hooks/useNotifications';
+import { useApplications }   from '@/hooks/useApplications';
 import JobCard               from '@/components/JobCard';
 import FilterBar             from '@/components/FilterBar';
 import StatsBar              from '@/components/StatsBar';
 import ProposalModal         from '@/components/ProposalModal';
 import NotificationToast     from '@/components/NotificationToast';
+import ApplicationModal      from '@/components/ApplicationModal';
+import ApplicationTracker    from '@/components/ApplicationTracker';
 import { fetchStats, fetchTopPicks } from '@/lib/api';
 
 const DEFAULT_FILTERS = { sortBy: 'posted_at' };
@@ -18,23 +21,28 @@ export default function Dashboard() {
   const [lastUpdate,   setLastUpdate]   = useState(null);
   const [toasts,       setToasts]       = useState([]);
   const [proposalJob,  setProposalJob]  = useState(null);
+  const [applyTarget,  setApplyTarget]  = useState(null); // job being marked applied
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [topPicks,     setTopPicks]     = useState([]);
-  const [activeTab,    setActiveTab]    = useState('all');
+  const [activeTab,    setActiveTab]    = useState('all'); // 'all' | 'top' | 'tracker'
   const toastId = useRef(0);
 
-  const { jobs, loading, error, loadJobs, addJobs } = useJobs();
-  const { requestPermission, notify, playAlert }     = useNotifications();
+  const { jobs, loading, error, loadJobs, addJobs }  = useJobs();
+  const { requestPermission, notify, playAlert }      = useNotifications();
+  const {
+    applications, stats: appStats, appliedIds,
+    apply, update: updateApp, remove: removeApp,
+  } = useApplications();
 
-  // ── Load initial data ────────────────────────────────────────────────────────
+  // ── Initial data load ──────────────────────────────────────────────────────
   useEffect(() => {
     loadJobs(DEFAULT_FILTERS);
     fetchStats().then(setStats).catch(() => {});
     fetchTopPicks(120, 20).then(d => setTopPicks(d.jobs || [])).catch(() => {});
   }, [loadJobs]);
 
-  // Refresh stats every 30 s
+  // Refresh job stats every 30 s
   useEffect(() => {
     const t = setInterval(() => {
       fetchStats().then(s => { setStats(s); setLastUpdate(Date.now()); }).catch(() => {});
@@ -42,7 +50,7 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  // ── Toasts ───────────────────────────────────────────────────────────────────
+  // ── Toasts ─────────────────────────────────────────────────────────────────
   const pushToast = useCallback((title, body, urgent = false) => {
     const id = ++toastId.current;
     setToasts(prev => [{ id, title, body, urgent }, ...prev].slice(0, 5));
@@ -52,7 +60,7 @@ export default function Dashboard() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // ── WebSocket: handle incoming jobs ─────────────────────────────────────────
+  // ── WebSocket: handle incoming jobs ───────────────────────────────────────
   const handleNewJobs = useCallback((incoming, count) => {
     addJobs(incoming);
     setLastUpdate(Date.now());
@@ -63,7 +71,6 @@ export default function Dashboard() {
 
     if (soundEnabled) playAlert(isUrgent ? 'urgent' : 'soft');
 
-    // Update top-picks panel
     if (fastWins.length) {
       setTopPicks(prev => {
         const merged = [...fastWins, ...prev];
@@ -74,7 +81,6 @@ export default function Dashboard() {
       });
     }
 
-    // Browser notification for urgent jobs
     if (notifEnabled && isUrgent) {
       const best = fastWins[0] || hot[0];
       notify(
@@ -84,7 +90,6 @@ export default function Dashboard() {
       );
     }
 
-    // Toast
     const best = incoming[0];
     if (best) {
       const label = fastWins.length
@@ -100,20 +105,34 @@ export default function Dashboard() {
     onDisconnected:() => {},
   });
 
-  // ── Enable browser notifications ──────────────────────────────────────────────
+  // ── Notifications permission ───────────────────────────────────────────────
   const handleEnableNotif = useCallback(async () => {
     const perm = await requestPermission();
     setNotifEnabled(perm === 'granted');
   }, [requestPermission]);
 
-  // ── Apply filters ─────────────────────────────────────────────────────────────
+  // ── Filters ────────────────────────────────────────────────────────────────
   const handleApply = useCallback((f) => {
     setFilters(f);
     loadJobs(f);
   }, [loadJobs]);
 
+  // ── Application tracking handlers ──────────────────────────────────────────
+  const handleMarkApplied = useCallback((job) => {
+    setApplyTarget(job);
+  }, []);
+
+  const handleSaveApplication = useCallback(async ({ status, notes, appliedAt }) => {
+    if (!applyTarget) return;
+    await apply(applyTarget, { status, notes, appliedAt });
+    pushToast('📤 Application tracked', applyTarget.title);
+    setApplyTarget(null);
+  }, [applyTarget, apply, pushToast]);
+
+  // ── Displayed jobs ─────────────────────────────────────────────────────────
   const displayedJobs = activeTab === 'top' ? topPicks : jobs;
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
@@ -140,7 +159,7 @@ export default function Dashboard() {
                 notifEnabled ? 'border-green-500 text-green-400' : 'border-gray-700 text-gray-500'
               }`}
             >
-              {notifEnabled ? '🟢 Alerts ON' : '⚪ Alerts OFF'}
+              {notifEnabled ? '🟢 Alerts' : '⚪ Alerts'}
             </button>
           </div>
         </div>
@@ -149,23 +168,20 @@ export default function Dashboard() {
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-4">
         <StatsBar stats={stats} connected={connected} lastUpdate={lastUpdate} />
 
-        <FilterBar
-          filters={filters}
-          onChange={setFilters}
-          onApply={handleApply}
-          jobCount={displayedJobs.length}
-        />
-
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-xl p-1 w-fit flex-wrap">
           {[
-            { key: 'all', label: '📋 All Jobs' },
-            { key: 'top', label: '🏆 Fast Win Picks' },
+            { key: 'all',     label: '📋 All Jobs' },
+            { key: 'top',     label: '🏆 Fast Win Picks' },
+            {
+              key: 'tracker',
+              label: `📤 My Applications${appStats?.total ? ` (${appStats.total})` : ''}`,
+            },
           ].map(t => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`text-xs font-semibold px-4 py-2 rounded-lg transition-colors ${
+              className={`text-xs font-semibold px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
                 activeTab === t.key ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
@@ -174,51 +190,93 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Win probability explanation banner (top tab only) */}
-        {activeTab === 'top' && (
-          <div className="bg-gray-900 border border-indigo-900/60 rounded-xl p-4 text-xs space-y-2">
-            <p className="text-indigo-300 font-semibold text-sm">
-              🏆 Auto-ranked by Fastest Win Probability
-            </p>
-            <p className="text-gray-400">
-              Each job is scored across three dimensions — beat competitors by targeting the right jobs first.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
-              <ScorePill color="blue"   label="Competition  40%" tip="Fewer applicants + freshly posted" />
-              <ScorePill color="yellow" label="Urgency  35%"     tip="Urgent keywords + recency + budget" />
-              <ScorePill color="green"  label="Simplicity  25%"  tip="Micro-task, clear scope, deliverable" />
+        {/* ── Application Tracker tab ──────────────────────────────────────── */}
+        {activeTab === 'tracker' && (
+          <ApplicationTracker
+            applications={applications}
+            stats={appStats}
+            onUpdate={updateApp}
+            onRemove={removeApp}
+          />
+        )}
+
+        {/* ── Job feed tabs ─────────────────────────────────────────────────── */}
+        {activeTab !== 'tracker' && (
+          <>
+            {activeTab === 'all' && (
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                onApply={handleApply}
+                jobCount={jobs.length}
+              />
+            )}
+
+            {/* Win probability banner for top tab */}
+            {activeTab === 'top' && (
+              <div className="bg-gray-900 border border-indigo-900/60 rounded-xl p-4 text-xs space-y-2">
+                <p className="text-indigo-300 font-semibold text-sm">
+                  🏆 Auto-ranked by Fastest Win Probability
+                </p>
+                <p className="text-gray-400">
+                  Three signals combine to surface the jobs you're most likely to win fastest.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                  <ScorePill color="blue"   label="Competition  40%" tip="Fewer applicants + freshly posted" />
+                  <ScorePill color="yellow" label="Urgency  35%"     tip="Urgent keywords + recency + budget" />
+                  <ScorePill color="green"  label="Simplicity  25%"  tip="Micro-task, clear scope, deliverable" />
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="text-center py-16 text-gray-500 animate-pulse">Loading jobs…</div>
+            )}
+            {error && (
+              <div className="text-center py-8 text-red-400 text-sm">
+                ⚠️ {error}
+                <br />
+                <span className="text-gray-500 text-xs">Make sure the backend is running on port 3001.</span>
+              </div>
+            )}
+            {!loading && !error && displayedJobs.length === 0 && (
+              <div className="text-center py-16 text-gray-500 text-sm">
+                No jobs found yet — the backend is fetching listings every 30 seconds.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayedJobs.map(job => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  applicationStatus={appliedIds.has(job.id)
+                    ? (applications.find(a => a.job_id === job.id)?.status ?? 'applied')
+                    : null
+                  }
+                  onProposal={setProposalJob}
+                  onMarkApplied={handleMarkApplied}
+                />
+              ))}
             </div>
-          </div>
+          </>
         )}
-
-        {/* Job grid */}
-        {loading && (
-          <div className="text-center py-16 text-gray-500 animate-pulse">Loading jobs…</div>
-        )}
-        {error && (
-          <div className="text-center py-8 text-red-400 text-sm">
-            ⚠️ {error}
-            <br />
-            <span className="text-gray-500 text-xs">Make sure the backend is running on port 3001.</span>
-          </div>
-        )}
-        {!loading && !error && displayedJobs.length === 0 && (
-          <div className="text-center py-16 text-gray-500 text-sm">
-            No jobs found yet — the backend is fetching listings. Check back in 30 seconds.
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayedJobs.map(job => (
-            <JobCard key={job.id} job={job} onProposal={setProposalJob} />
-          ))}
-        </div>
       </main>
 
+      {/* Modals */}
       {proposalJob && (
         <ProposalModal job={proposalJob} onClose={() => setProposalJob(null)} />
       )}
+      {applyTarget && (
+        <ApplicationModal
+          job={applyTarget}
+          existing={applications.find(a => a.job_id === applyTarget.id) || null}
+          onSave={handleSaveApplication}
+          onClose={() => setApplyTarget(null)}
+        />
+      )}
 
+      {/* Toasts */}
       <NotificationToast notifications={toasts} onDismiss={dismissToast} />
     </div>
   );
@@ -237,4 +295,5 @@ function ScorePill({ color, label, tip }) {
     </div>
   );
 }
+
 

@@ -3,7 +3,8 @@ const http = require('http');
 const cors = require('cors');
 const wsManager = require('./websocket');
 const scheduler = require('./scheduler');
-const jobsRouter = require('./routes/jobs');
+const jobsRouter         = require('./routes/jobs');
+const applicationsRouter = require('./routes/applications');
 
 const PORT = process.env.PORT || 3001;
 const FETCH_INTERVAL_MS = parseInt(process.env.FETCH_INTERVAL_MS) || 30000; // 30 seconds
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api', jobsRouter);
+app.use('/api/applications', applicationsRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), clients: wsManager.getClientCount() });

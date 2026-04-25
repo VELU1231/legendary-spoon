@@ -48,6 +48,23 @@ function initSchema() {
       id TEXT PRIMARY KEY,
       seen_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS applications (
+      job_id      TEXT PRIMARY KEY,
+      status      TEXT NOT NULL DEFAULT 'applied',
+      applied_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL,
+      notes       TEXT    NOT NULL DEFAULT '',
+      job_title   TEXT,
+      job_company TEXT,
+      job_url     TEXT,
+      job_source  TEXT,
+      job_budget  TEXT,
+      win_probability REAL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_applications_applied_at ON applications(applied_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_applications_status     ON applications(status);
   `);
 
   // Non-destructive migration: add new columns to databases created before this schema version
@@ -151,4 +168,132 @@ function markSeen(id) {
   db.prepare('INSERT OR IGNORE INTO seen_ids (id, seen_at) VALUES (?, ?)').run(id, Date.now());
 }
 
-module.exports = { getDb, upsertJob, getJobs, getStats, isNew, markSeen };
+// ─── Application tracking ─────────────────────────────────────────────────────
+
+const VALID_STATUSES = new Set([
+  'applied', 'interviewing', 'offer', 'accepted', 'rejected', 'withdrawn',
+]);
+
+/**
+ * Create or replace an application record.
+ * `job` is the full job object (used to snapshot key fields).
+ */
+function upsertApplication({ job, status = 'applied', applied_at, notes = '' }) {
+  const db = getDb();
+  if (!VALID_STATUSES.has(status)) throw new Error(`Invalid status: ${status}`);
+
+  const now = Date.now();
+  const appliedTs = applied_at ? new Date(applied_at).getTime() : now;
+
+  const budget = job.budget_max
+    ? `${job.budget_currency || 'USD'} ${Number(job.budget_max).toLocaleString()}`
+    : null;
+
+  db.prepare(`
+    INSERT INTO applications
+      (job_id, status, applied_at, updated_at, notes,
+       job_title, job_company, job_url, job_source, job_budget, win_probability)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(job_id) DO UPDATE SET
+      status     = excluded.status,
+      updated_at = excluded.updated_at,
+      notes      = excluded.notes
+  `).run(
+    job.id,
+    status,
+    appliedTs,
+    now,
+    String(notes).slice(0, 2000),
+    job.title    || null,
+    job.company  || null,
+    job.url      || null,
+    job.source   || null,
+    budget,
+    job.win_probability || 0,
+  );
+
+  return getApplication(job.id);
+}
+
+/** Update status and/or notes for an existing application. */
+function updateApplication(jobId, { status, notes, applied_at }) {
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM applications WHERE job_id = ?').get(jobId);
+  if (!existing) return null;
+
+  const now = Date.now();
+  const newStatus    = status     && VALID_STATUSES.has(status) ? status : existing.status;
+  const newNotes     = notes     !== undefined ? String(notes).slice(0, 2000) : existing.notes;
+  const newAppliedAt = applied_at ? new Date(applied_at).getTime() : existing.applied_at;
+
+  db.prepare(`
+    UPDATE applications
+    SET status = ?, notes = ?, applied_at = ?, updated_at = ?
+    WHERE job_id = ?
+  `).run(newStatus, newNotes, newAppliedAt, now, jobId);
+
+  return getApplication(jobId);
+}
+
+/** Return a single application by job_id, or null. */
+function getApplication(jobId) {
+  const db  = getDb();
+  const row = db.prepare('SELECT * FROM applications WHERE job_id = ?').get(jobId);
+  return row || null;
+}
+
+/**
+ * Return all applications, optionally filtered by status.
+ * Sorted newest-applied-first by default.
+ */
+function getApplications({ status, sortBy = 'applied_at', limit = 200, offset = 0 } = {}) {
+  const db = getDb();
+  const ALLOWED_APP_SORT = new Set(['applied_at', 'updated_at', 'status', 'win_probability']);
+  const orderCol = ALLOWED_APP_SORT.has(sortBy) ? sortBy : 'applied_at';
+
+  let query  = 'SELECT * FROM applications WHERE 1=1';
+  const params = [];
+  if (status && VALID_STATUSES.has(status)) {
+    query += ' AND status = ?';
+    params.push(status);
+  }
+  query += ` ORDER BY ${orderCol} DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
+
+  return db.prepare(query).all(...params);
+}
+
+/** Delete an application record by job_id. Returns true if deleted. */
+function deleteApplication(jobId) {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM applications WHERE job_id = ?').run(jobId);
+  return result.changes > 0;
+}
+
+/** Return aggregate counts per status. */
+function getApplicationStats() {
+  const db = getDb();
+  const rows    = db.prepare('SELECT status, COUNT(*) as count FROM applications GROUP BY status').all();
+  const total   = db.prepare('SELECT COUNT(*) as count FROM applications').get().count;
+  const byStatus = Object.fromEntries(rows.map(r => [r.status, r.count]));
+  return { total, byStatus, validStatuses: [...VALID_STATUSES] };
+}
+
+/** Return the set of job_ids that have been applied to (for fast lookup). */
+function getAppliedJobIds() {
+  const db = getDb();
+  return new Set(
+    db.prepare('SELECT job_id FROM applications').all().map(r => r.job_id)
+  );
+}
+
+module.exports = {
+  getDb,
+  upsertJob, getJobs, getStats,
+  isNew, markSeen,
+  deserializeJob,
+  // Application tracking
+  upsertApplication, updateApplication, getApplication,
+  getApplications, deleteApplication, getApplicationStats, getAppliedJobIds,
+  VALID_STATUSES,
+};

@@ -3,12 +3,21 @@ import { useState, useCallback } from 'react';
 import WinScoreMeter from './WinScoreMeter';
 
 const LABEL_CONFIG = {
-  HOT:             { bg: 'bg-red-600',    text: 'text-white', icon: '🔥', tip: 'Posted < 2 minutes ago' },
-  FRESH:           { bg: 'bg-orange-500', text: 'text-white', icon: '⚡', tip: 'Posted < 10 minutes ago' },
-  FAST_WIN:        { bg: 'bg-green-600',  text: 'text-white', icon: '🏆', tip: 'High win probability' },
-  GOOD_CHANCE:     { bg: 'bg-emerald-700', text: 'text-white', icon: '✅', tip: 'Above-average win chance' },
-  LOW_COMPETITION: { bg: 'bg-blue-700',   text: 'text-white', icon: '🎯', tip: 'Few applicants detected' },
-  MICRO_TASK:      { bg: 'bg-purple-700', text: 'text-white', icon: '⚙️', tip: 'Quick/micro task' },
+  HOT:             { bg: 'bg-red-600',      text: 'text-white', icon: '🔥', tip: 'Posted < 2 minutes ago' },
+  FRESH:           { bg: 'bg-orange-500',   text: 'text-white', icon: '⚡', tip: 'Posted < 10 minutes ago' },
+  FAST_WIN:        { bg: 'bg-green-600',    text: 'text-white', icon: '🏆', tip: 'High win probability' },
+  GOOD_CHANCE:     { bg: 'bg-emerald-700',  text: 'text-white', icon: '✅', tip: 'Above-average win chance' },
+  LOW_COMPETITION: { bg: 'bg-blue-700',     text: 'text-white', icon: '🎯', tip: 'Few applicants detected' },
+  MICRO_TASK:      { bg: 'bg-purple-700',   text: 'text-white', icon: '⚙️', tip: 'Quick/micro task' },
+};
+
+const STATUS_STYLE = {
+  applied:      { label: '📤 Applied',      cls: 'bg-blue-600/20 text-blue-300 border-blue-600/40' },
+  interviewing: { label: '💬 Interviewing',  cls: 'bg-yellow-600/20 text-yellow-300 border-yellow-600/40' },
+  offer:        { label: '🎉 Offer',         cls: 'bg-green-600/20 text-green-300 border-green-600/40' },
+  accepted:     { label: '✅ Accepted',      cls: 'bg-emerald-700/20 text-emerald-300 border-emerald-700/40' },
+  rejected:     { label: '❌ Rejected',      cls: 'bg-red-700/20 text-red-300 border-red-700/40' },
+  withdrawn:    { label: '🚫 Withdrawn',     cls: 'bg-gray-600/20 text-gray-400 border-gray-600/40' },
 };
 
 const SOURCE_COLORS = {
@@ -31,11 +40,19 @@ function timeAgo(ms) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-export default function JobCard({ job, onProposal }) {
+/**
+ * @param {object} props
+ * @param {object} props.job
+ * @param {string|null} props.applicationStatus  – current status from tracker, or null
+ * @param {Function} props.onProposal            – open proposal modal
+ * @param {Function} props.onMarkApplied         – open application modal
+ */
+export default function JobCard({ job, applicationStatus = null, onProposal, onMarkApplied }) {
   const [copied, setCopied] = useState(false);
 
-  const isHot   = (job.labels || []).includes('HOT');
-  const isWin   = (job.labels || []).includes('FAST_WIN');
+  const isHot    = (job.labels || []).includes('HOT');
+  const isWin    = (job.labels || []).includes('FAST_WIN');
+  const isTracked = applicationStatus !== null;
 
   const handleCopyLink = useCallback(() => {
     navigator.clipboard.writeText(job.url).then(() => {
@@ -86,6 +103,15 @@ export default function JobCard({ job, onProposal }) {
             </span>
           );
         })}
+        {/* Application status badge */}
+        {isTracked && STATUS_STYLE[applicationStatus] && (
+          <span
+            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${STATUS_STYLE[applicationStatus].cls}`}
+            title="Your application status"
+          >
+            {STATUS_STYLE[applicationStatus].label}
+          </span>
+        )}
         {/* Source badge */}
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${srcClass}`}>
           {job.source}
@@ -150,11 +176,33 @@ export default function JobCard({ job, onProposal }) {
           🚀 Apply Now
         </a>
 
+        {/* Mark Applied / status button */}
+        {isTracked ? (
+          <button
+            onClick={() => onMarkApplied?.(job)}
+            className={`text-xs font-semibold py-2 px-3 rounded-lg border transition-colors ${
+              STATUS_STYLE[applicationStatus]?.cls ||
+              'border-gray-600 text-gray-300 bg-gray-800 hover:bg-gray-700'
+            }`}
+            title="Click to update application status"
+          >
+            {STATUS_STYLE[applicationStatus]?.label || '📤 Applied'}
+          </button>
+        ) : (
+          <button
+            onClick={() => onMarkApplied?.(job)}
+            className="text-xs font-semibold py-2 px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors"
+            title="Track this application"
+          >
+            📤 Track
+          </button>
+        )}
+
         <button
           onClick={() => onProposal?.(job)}
-          className="text-xs font-semibold py-2 px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors"
+          className="text-xs font-semibold py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
         >
-          📋 Proposal
+          📋
         </button>
 
         <button
