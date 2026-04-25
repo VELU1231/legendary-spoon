@@ -96,4 +96,5 @@ export async function removeApplication(jobId) {
   return res.json();
 }
 
-export { };
+// No additional exports beyond named functions above
+
