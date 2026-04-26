@@ -18,11 +18,12 @@
 name = "jobsniper-api"
 main = "src/index.js"
 compatibility_date = "2026-04-25"
+# account_id is loaded from .env (CLOUDFLARE_ACCOUNT_ID) — never commit that file
 
 [[d1_databases]]
 binding           = "DB"
 database_name     = "jobsniper"
-database_id       = "YOUR_DATABASE_ID"   # replace after: npm run db:create
+database_id       = "ab1a8cd2-1da2-4180-904e-7e54ad474f79"
 migrations_dir    = "migrations"
 
 [triggers]
