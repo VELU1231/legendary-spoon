@@ -39,7 +39,8 @@ app.use('*', cors({
   exposeHeaders:  [],
 }));
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health & Root ─────────────────────────────────────────────────────────────
+app.get('/', (c) => c.json({ status: 'ok', message: 'JobSniper API is running!' }));
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
@@ -278,7 +279,7 @@ app.delete('/api/applications/:jobId', async (c) => {
 async function runFetchCycle(env) {
   console.log(`[Scheduler] Starting fetch cycle at ${new Date().toISOString()}`);
   try {
-    const rawJobs = await fetchAllJobs();
+    const rawJobs = await fetchAllJobs(env);
     console.log(`[Scheduler] Fetched ${rawJobs.length} total jobs`);
 
     const newJobs = [];
